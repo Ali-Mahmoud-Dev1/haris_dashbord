@@ -6,7 +6,8 @@
 :root {
   /* Base colors */
   --background: #f8fafc;         /* أبيض مائل للرمادي */
-  --foreground: #0f172a;         /* أسود ناعم */
+  --foreground: #0f172a;   
+        /* أسود ناعم */
 
   /* Primary (Sky Blue) */
   --primary: #0ea5e9;            /* أزرق سماوي */
