@@ -5,8 +5,3 @@
     }
   }
 }
-echo "# haris_dashbord" >> README.md
-
-
-git commit -m "first commit"
-
