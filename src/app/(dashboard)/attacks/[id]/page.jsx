@@ -2,6 +2,7 @@ import Link from "next/link";
 
 /**
  * Mock incidents — align IDs with alerts feed; replace with API fetch by `id`.
+ * 
  */
 const INCIDENTS = {
   "a-1042": {
