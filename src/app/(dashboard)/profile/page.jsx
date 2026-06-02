@@ -14,7 +14,7 @@ const FEATURE_LABELS = [
   { key: "response", label: "Response playbooks" },
 ];
 
-/** صلاحيات افتراضية للعرض حتى يعود role من الـ API */
+
 const MATRIX = {
   admin: {
     dashboard: true,
