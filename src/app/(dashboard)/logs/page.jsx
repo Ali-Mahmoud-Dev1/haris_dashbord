@@ -1,244 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-/** Mock — استبدلها بـ API لاحقًا */
-const LOGS = [
-  {
-    id: "log-9042",
-    timeIso: "2026-04-23T12:31:02",
-    timeLabel: "moments ago",
-    facility: "firewall",
-    severity: "warning",
-    host: "gw-core-01",
-    message: "Dropped inbound TCP 443 from 203.0.113.18 — rate limit exceeded",
-  },
-  {
-    id: "log-9041",
-    timeIso: "2026-04-23T12:29:41",
-    timeLabel: "2 min ago",
-    facility: "sshd",
-    severity: "warning",
-    host: "srv-db-02",
-    message: "Failed password for invalid user oracle from 10.0.0.44 port 22 ssh2",
-  },
-  {
-    id: "log-9040",
-    timeIso: "2026-04-23T12:27:15",
-    timeLabel: "4 min ago",
-    facility: "kernel",
-    severity: "info",
-    host: "edge-03",
-    message: "IPv6: ADDRCONF(NETDEV_CHANGE): eth2: link becomes ready",
-  },
-  {
-    id: "log-9039",
-    timeIso: "2026-04-23T12:25:00",
-    timeLabel: "6 min ago",
-    facility: "dns",
-    severity: "info",
-    host: "resolver-01",
-    message: "Query REFUSED example.invalid IN A from 192.168.20.5",
-  },
-  {
-    id: "log-9038",
-    timeIso: "2026-04-23T12:22:33",
-    timeLabel: "9 min ago",
-    facility: "ids",
-    severity: "error",
-    host: "sensor-east",
-    message: "Signature match: ET SCAN Potential SSH Scan outbound from 172.16.0.12",
-  },
-  {
-    id: "log-9037",
-    timeIso: "2026-04-23T12:18:50",
-    timeLabel: "12 min ago",
-    facility: "dhcp",
-    severity: "info",
-    host: "dhcp-vlan40",
-    message: "DHCPACK on 192.168.40.107 to aa:bb:cc:dd:ee:ff via eth1",
-  },
-  {
-    id: "log-9036",
-    timeIso: "2026-04-23T12:15:11",
-    timeLabel: "16 min ago",
-    facility: "nginx",
-    severity: "warning",
-    host: "web-lb-01",
-    message: 'client 198.51.100.9 # rate limited — "/api/auth" 429',
-  },
-  {
-    id: "log-9035",
-    timeIso: "2026-04-23T12:10:00",
-    timeLabel: "21 min ago",
-    facility: "cron",
-    severity: "info",
-    host: "srv-backup",
-    message: "(root) CMD (/usr/local/bin/backup_snap.sh)",
-  },
-  {
-    id: "log-9034",
-    timeIso: "2026-04-23T12:05:22",
-    timeLabel: "26 min ago",
-    facility: "audit",
-    severity: "info",
-    host: "mgmt-01",
-    message: "USER_LOGIN pid=4821 uid=0 auid=1002 tty=pts/2 host=10.0.5.2",
-  },
-  {
-    id: "log-9033",
-    timeIso: "2026-04-23T11:58:00",
-    timeLabel: "33 min ago",
-    facility: "kernel",
-    severity: "critical",
-    host: "hypervisor-02",
-    message: "Out of memory: Kill process 8812 (java) score 920 or sacrifice child",
-  },
-  {
-    id: "log-9032",
-    timeIso: "2026-04-23T11:45:30",
-    timeLabel: "46 min ago",
-    facility: "firewall",
-    severity: "info",
-    host: "gw-core-01",
-    message: "NAT session established 192.168.1.5:55421 → 93.184.216.34:443",
-  },
-  {
-    id: "log-9031",
-    timeIso: "2026-04-23T11:40:12",
-    timeLabel: "51 min ago",
-    facility: "sshd",
-    severity: "error",
-    host: "jump-box",
-    message: "Disconnecting invalid user postgres 92.63.41.11 port 59221: Too many authentication failures",
-  },
-  {
-    id: "log-9030",
-    timeIso: "2026-04-23T11:35:00",
-    timeLabel: "56 min ago",
-    facility: "systemd",
-    severity: "warning",
-    host: "srv-app-04",
-    message: "nginx.service: Failed with result 'timeout'",
-  },
-  {
-    id: "log-9029",
-    timeIso: "2026-04-23T11:20:44",
-    timeLabel: "1 h ago",
-    facility: "ids",
-    severity: "warning",
-    host: "sensor-west",
-    message: "Possible ICMP tunnel — sustained echo reply burst from 172.16.8.3",
-  },
-  {
-    id: "log-9028",
-    timeIso: "2026-04-23T11:05:00",
-    timeLabel: "1 h ago",
-    facility: "kerberos",
-    severity: "info",
-    host: "dc-01",
-    message: "TGT_REQ ok client host/workstation01.example.local → krbtgt/EXAMPLE.LOCAL",
-  },
-  {
-    id: "log-9027",
-    timeIso: "2026-04-23T10:50:18",
-    timeLabel: "2 h ago",
-    facility: "postgresql",
-    severity: "warning",
-    host: "srv-db-02",
-    message: "connection authorized: user=readonly database=analytics SSL off",
-  },
-  {
-    id: "log-9026",
-    timeIso: "2026-04-23T10:30:55",
-    timeLabel: "2 h ago",
-    facility: "firewall",
-    severity: "error",
-    host: "gw-core-01",
-    message: "SYN flood mitigation engaged on WAN1 — threshold 5000 pps",
-  },
-  {
-    id: "log-9025",
-    timeIso: "2026-04-23T10:15:00",
-    timeLabel: "2 h ago",
-    facility: "ntp",
-    severity: "info",
-    host: "clock-01",
-    message: "adjusting clock by -0.142347s — peer pool.ntp.org",
-  },
-  {
-    id: "log-9024",
-    timeIso: "2026-04-23T09:55:22",
-    timeLabel: "3 h ago",
-    facility: "vpn",
-    severity: "info",
-    host: "vpn-gw",
-    message: "IKE_SA established peer 198.51.100.200 — tunnel VLAN30",
-  },
-  {
-    id: "log-9023",
-    timeIso: "2026-04-23T09:40:00",
-    timeLabel: "3 h ago",
-    facility: "samba",
-    severity: "warning",
-    host: "files-01",
-    message: "SMB2 write denied — share HR_SCAN user=guest ip=192.168.50.22",
-  },
-  {
-    id: "log-9022",
-    timeIso: "2026-04-23T09:22:10",
-    timeLabel: "3 h ago",
-    facility: "docker",
-    severity: "info",
-    host: "srv-app-04",
-    message: "container healthcheck OK name=hares-api id=7f3a…",
-  },
-  {
-    id: "log-9021",
-    timeIso: "2026-04-23T09:00:00",
-    timeLabel: "3 h ago",
-    facility: "rsyslog",
-    severity: "info",
-    host: "collector-01",
-    message: "imudp: opened UDP port 514 — accepting syslog",
-  },
-  {
-    id: "log-9020",
-    timeIso: "2026-04-23T08:45:33",
-    timeLabel: "4 h ago",
-    facility: "snmp",
-    severity: "warning",
-    host: "switch-agg-02",
-    message: "LINKDOWN: Interface GigabitEthernet1/0/24 admin down",
-  },
-  {
-    id: "log-9019",
-    timeIso: "2026-04-23T08:30:00",
-    timeLabel: "4 h ago",
-    facility: "kernel",
-    severity: "info",
-    host: "edge-01",
-    message: "nftables: rule added chain=input policy drop log prefix=\"DROP: \"",
-  },
-  {
-    id: "log-9018",
-    timeIso: "2026-04-23T08:10:15",
-    timeLabel: "4 h ago",
-    facility: "audit",
-    severity: "error",
-    host: "mgmt-01",
-    message: "SELINUX_DENIAL — avc: denied { write } for pid=221 name=log comm=nginx",
-  },
-  {
-    id: "log-9017",
-    timeIso: "2026-04-23T07:50:00",
-    timeLabel: "5 h ago",
-    facility: "clamav",
-    severity: "warning",
-    host: "mail-gw",
-    message: "Heuristics.Phishing.Email found in stream — quarantined msg-id=<abc>",
-  },
-];
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import { selectCurrentUser } from "@/redux/slices/authSlice";
+import {
+  clearActivityLogs,
+  createLogEntry,
+  fetchLogs,
+  ingestCsvLog,
+  ingestJsonLogs,
+  ingestSyslogMessage,
+  selectLogItems,
+  selectLogsError,
+  selectLogsIngestError,
+  selectLogsIngesting,
+  selectLogsStatus,
+  selectLogsSuccessMessage,
+} from "@/redux/slices/logsSlice";
 
 const PAGE_SIZE = 10;
 
@@ -248,13 +26,6 @@ const SEVERITY_CHIPS = [
   { value: "error", label: "Error" },
   { value: "warning", label: "Warning" },
   { value: "info", label: "Info" },
-];
-
-const FACILITY_OPTIONS = [
-  { value: "all", label: "All facilities" },
-  ...Array.from(new Set(LOGS.map((l) => l.facility)))
-    .sort()
-    .map((f) => ({ value: f, label: f })),
 ];
 
 const severityBadge = {
@@ -269,7 +40,7 @@ const selectClass =
   "hover:border-primary/25 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/25";
 
 function normalize(s) {
-  return s.trim().toLowerCase();
+  return String(s ?? "").trim().toLowerCase();
 }
 
 function ChevronDown({ className }) {
@@ -281,21 +52,54 @@ function ChevronDown({ className }) {
 }
 
 export default function LogsPage() {
+  const dispatch = useAppDispatch();
+  const logs = useAppSelector(selectLogItems);
+  const status = useAppSelector(selectLogsStatus);
+  const loadError = useAppSelector(selectLogsError);
+  const ingestError = useAppSelector(selectLogsIngestError);
+  const ingesting = useAppSelector(selectLogsIngesting);
+  const success = useAppSelector(selectLogsSuccessMessage) ?? "";
+
   const [query, setQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [facilityFilter, setFacilityFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [syslogMessage, setSyslogMessage] = useState("");
+  const [jsonPayload, setJsonPayload] = useState('{"logs": []}');
+  const [jsonError, setJsonError] = useState("");
+  const [csvFile, setCsvFile] = useState(/** @type {File | null} */ (null));
+
+  const error = jsonError || ingestError || loadError || "";
+
+  const loading = status === "loading" || status === "idle";
+
+  const role = useAppSelector(selectCurrentUser)?.role;
+  const canClearLogs = role === "ADMIN";
+
+  useEffect(() => {
+    dispatch(fetchLogs());
+  }, [dispatch]);
+
+  const facilityOptions = useMemo(
+    () => [
+      { value: "all", label: "All facilities" },
+      ...Array.from(new Set(logs.map((l) => l.facility)))
+        .sort()
+        .map((f) => ({ value: f, label: f })),
+    ],
+    [logs]
+  );
 
   const filtered = useMemo(() => {
     const q = normalize(query);
-    return LOGS.filter((row) => {
+    return logs.filter((row) => {
       if (severityFilter !== "all" && row.severity !== severityFilter) return false;
       if (facilityFilter !== "all" && row.facility !== facilityFilter) return false;
       if (!q) return true;
       const hay = `${row.message} ${row.facility} ${row.host} ${row.id}`;
       return normalize(hay).includes(q);
     }).sort((a, b) => (a.timeIso < b.timeIso ? 1 : -1));
-  }, [query, severityFilter, facilityFilter]);
+  }, [logs, query, severityFilter, facilityFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
@@ -320,15 +124,29 @@ export default function LogsPage() {
   };
 
   const summary = useMemo(() => {
-    const bySev = LOGS.reduce(
+    const bySev = logs.reduce(
       (acc, l) => {
         acc[l.severity] = (acc[l.severity] || 0) + 1;
         return acc;
       },
       { critical: 0, error: 0, warning: 0, info: 0 }
     );
-    return { total: LOGS.length, bySev };
-  }, []);
+    return { total: logs.length, bySev };
+  }, [logs]);
+
+  const handleClearLogs = () => {
+    if (!canClearLogs) return;
+    dispatch(clearActivityLogs());
+  };
+
+  const handleUploadJson = () => {
+    try {
+      setJsonError("");
+      dispatch(ingestJsonLogs(JSON.parse(jsonPayload)));
+    } catch {
+      setJsonError("Invalid JSON payload.");
+    }
+  };
 
   return (
     <div className="relative w-full max-w-7xl mx-auto px-1 sm:px-0">
@@ -349,7 +167,7 @@ export default function LogsPage() {
               facility, and paginate through high-volume feeds.
             </p>
             <p className="text-xs text-muted/90 pt-0.5">
-              <span className="tabular-nums font-medium text-foreground">{summary.total}</span> sample
+              <span className="tabular-nums font-medium text-foreground">{summary.total}</span>
               lines ·{" "}
               <span className="tabular-nums font-medium text-red-600 dark:text-red-400">
                 {summary.bySev.critical}
@@ -357,9 +175,107 @@ export default function LogsPage() {
               critical ·{" "}
               <span className="tabular-nums font-medium text-primary">{summary.bySev.error}</span>{" "}
               errors
+              {loading ? " · loading" : ""}
             </p>
+            {error ? <p className="text-xs text-primary pt-1">{error}</p> : null}
+            {success ? <p className="text-xs text-accent pt-1">{success}</p> : null}
           </div>
+          {canClearLogs ? (
+            <button
+              type="button"
+              onClick={handleClearLogs}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border/90 bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+            >
+              Clear logs
+            </button>
+          ) : null}
         </header>
+
+        <section
+          className="rounded-2xl border border-border/90 bg-card p-4 sm:p-5 shadow-sm"
+          aria-label="Ingest logs"
+        >
+          <h2 className="text-sm font-semibold text-foreground">Ingest logs (API)</h2>
+          <p className="text-xs text-muted mt-1">upload/csv · upload/json · logs/bulk · logs/syslog · logs/activity</p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted">CSV file</label>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-xs"
+              />
+              <button
+                type="button"
+                disabled={!csvFile || ingesting}
+                onClick={() => csvFile && dispatch(ingestCsvLog(csvFile))}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-bold disabled:opacity-50"
+              >
+                Upload CSV
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted">JSON body</label>
+              <textarea
+                value={jsonPayload}
+                onChange={(e) => setJsonPayload(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-border/90 bg-background/60 px-3 py-2 font-mono text-xs"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={ingesting}
+                  onClick={handleUploadJson}
+                  className="rounded-lg border border-border px-3 py-2 text-xs font-bold disabled:opacity-50"
+                >
+                  Upload JSON / bulk
+                </button>
+                <button
+                  type="button"
+                  disabled={ingesting}
+                  onClick={() =>
+                    dispatch(
+                      createLogEntry({
+                        timestamp: new Date().toISOString(),
+                        source_ip: "127.0.0.1",
+                        event_type: "manual_entry",
+                        status: "info",
+                        raw_message: "Manual log from dashboard",
+                      })
+                    )
+                  }
+                  className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-bold text-primary disabled:opacity-50"
+                >
+                  Create one log
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 lg:col-span-2">
+              <label className="text-xs font-semibold text-muted">Syslog message</label>
+              <input
+                type="text"
+                value={syslogMessage}
+                onChange={(e) => setSyslogMessage(e.target.value)}
+                placeholder="denied tcp 192.168.1.1 -> 192.168.1.2(22)"
+                className="w-full rounded-xl border border-border/90 bg-background/60 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                disabled={!syslogMessage.trim() || ingesting}
+                onClick={() =>
+                  dispatch(
+                    ingestSyslogMessage({ message: syslogMessage.trim(), source_device: "dashboard" })
+                  )
+                }
+                className="rounded-lg border border-border px-3 py-2 text-xs font-bold disabled:opacity-50"
+              >
+                Ingest syslog
+              </button>
+            </div>
+          </div>
+        </section>
 
         <section
           className="rounded-2xl border border-border/90 bg-gradient-to-b from-card to-card/95 p-4 sm:p-5 shadow-sm shadow-foreground/5"
@@ -416,7 +332,7 @@ export default function LogsPage() {
                   onChange={(e) => setFacilityFilter(e.target.value)}
                   className={selectClass}
                 >
-                  {FACILITY_OPTIONS.map((o) => (
+                  {facilityOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
@@ -496,9 +412,13 @@ export default function LogsPage() {
                   <path d="M5 8h.01M5 12h.01M5 16h.01" strokeLinecap="round" />
                 </svg>
               </div>
-              <p className="text-base font-semibold text-foreground">No log lines match</p>
+              <p className="text-base font-semibold text-foreground">
+                {loading ? "Loading…" : logs.length === 0 ? "No logs from API" : "No log lines match"}
+              </p>
               <p className="mt-1 max-w-sm text-sm text-muted">
-                Broaden search or reset severity / facility filters to see events again.
+                {logs.length === 0 && !loading
+                  ? "Use ingest above or wait for collectors."
+                  : "Broaden search or reset severity / facility filters to see events again."}
               </p>
               <button
                 type="button"
@@ -545,7 +465,7 @@ export default function LogsPage() {
                         <td className="px-5 py-3 font-mono text-xs text-muted">{row.host}</td>
                         <td className="px-5 py-3">
                           <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${severityBadge[row.severity]}`}
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${severityBadge[row.severity] ?? severityBadge.info}`}
                           >
                             {row.severity}
                           </span>
@@ -567,7 +487,7 @@ export default function LogsPage() {
                       <div className="flex flex-wrap items-center gap-2 justify-between">
                         <span className="font-mono text-xs font-semibold text-primary">{row.facility}</span>
                         <span
-                          className={`rounded-md border px-2 py-0.5 text-[10px] font-bold capitalize ${severityBadge[row.severity]}`}
+                          className={`rounded-md border px-2 py-0.5 text-[10px] font-bold capitalize ${severityBadge[row.severity] ?? severityBadge.info}`}
                         >
                           {row.severity}
                         </span>

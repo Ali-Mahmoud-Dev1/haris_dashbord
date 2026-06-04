@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useAppDispatch } from "@/redux/hooks";
+import { clearAuthSession } from "@/lib/authStorage";
 import { clearSessionCookie } from "@/lib/session";
 import { logout } from "@/redux/slices/authSlice";
 
@@ -11,9 +12,13 @@ const menu = [
   { name: "Dashboard", path: "/dashboard", icon: "dashboard" },
   { name: "Alerts", path: "/alerts", icon: "alerts" },
   { name: "Logs", path: "/logs", icon: "logs" },
+  { name: "Inventory", path: "/inventory", icon: "inventory" },
+  { name: "Detection", path: "/detection", icon: "detection" },
   { name: "Analysis", path: "/analysis", icon: "analysis" },
   { name: "Simulation", path: "/simulation", icon: "simulation" },
   { name: "Response", path: "/response", icon: "response" },
+  { name: "Reports", path: "/reports", icon: "reports" },
+  { name: "Audit", path: "/audit", icon: "audit" },
   { name: "Profile", path: "/profile", icon: "profile" },
 ];
 
@@ -63,6 +68,35 @@ function NavIcon({ name, className }) {
           <path d="M4 12h5l2.5-3L14 12h2" strokeLinejoin="round" />
         </svg>
       );
+    case "inventory":
+      return (
+        <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <rect x="3" y="4" width="8" height="6" rx="1" />
+          <rect x="13" y="4" width="8" height="6" rx="1" />
+          <rect x="3" y="14" width="18" height="6" rx="1" />
+        </svg>
+      );
+    case "detection":
+      return (
+        <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="4" />
+        </svg>
+      );
+    case "reports":
+      return (
+        <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path d="M8 4h8v16H8V4z" strokeLinejoin="round" />
+          <path d="M10 8h4M10 12h4M10 16h2" strokeLinecap="round" />
+        </svg>
+      );
+    case "audit":
+      return (
+        <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+          <path d="M9 5H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V9" strokeLinejoin="round" />
+          <path d="M9 5l2-2h4l2 2M9 14l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case "profile":
       return (
         <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
@@ -83,7 +117,7 @@ function isItemActive(pathname, itemPath) {
 }
 
 export default function Sidebar() {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -108,7 +142,7 @@ export default function Sidebar() {
   }, [mobileOpen]);
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    clearAuthSession();
     clearSessionCookie();
     dispatch(logout());
     setMobileOpen(false);

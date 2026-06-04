@@ -1,92 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-
-/** Mock — استبدلها بـ API / PCAP pipeline لاحقًا */
-
-const SUMMARY = {
-  vlanMonitored: 6,
-  arpNeighborsTracked: 48,
-  suspiciousBindings: 3,
-  spoofAlertsOpen: 2,
-};
-
-const ARP_CHART = [
-  { label: "00", reqs: 12 },
-  { label: "04", reqs: 18 },
-  { label: "08", reqs: 15 },
-  { label: "12", reqs: 42 },
-  { label: "16", reqs: 28 },
-  { label: "20", reqs: 22 },
-];
-
-const ARP_TABLE = [
-  {
-    ip: "192.168.1.1",
-    mac: "aa:bb:cc:00:11:22",
-    vlan: "10",
-    iface: "agg-core · Gi1/0/1",
-    age: "2 min",
-    trust: "verified",
-    note: "Gateway — DHCP snooping trusted",
-  },
-  {
-    ip: "192.168.1.45",
-    mac: "de:ad:be:ef:01:99",
-    vlan: "10",
-    iface: "access-03 · Fa0/18",
-    age: "8 min",
-    trust: "suspicious",
-    note: "MAC churn vs DHCP lease (2 changes / 15 min)",
-  },
-  {
-    ip: "192.168.1.2",
-    mac: "aa:bb:cc:dd:ee:02",
-    vlan: "10",
-    iface: "access-02 · Fa0/7",
-    age: "14 min",
-    trust: "suspicious",
-    note: "Gratuitous ARP burst toward default GW",
-  },
-  {
-    ip: "192.168.40.107",
-    mac: "02:11:32:a4:c9:10",
-    vlan: "40",
-    iface: "access-05 · Fa0/22",
-    age: "1 h",
-    trust: "verified",
-    note: "Stable binding — matches DHCP ACK",
-  },
-  {
-    ip: "10.0.5.2",
-    mac: "48:9e:bd:12:34:56",
-    vlan: "mgmt",
-    iface: "mgmt-sw · Gi0/24",
-    age: "3 h",
-    trust: "stale",
-    note: "No ingress traffic — aging out recommended",
-  },
-];
-
-const SPOOF_ALERTS = [
-  {
-    id: "arp-009",
-    title: "Possible duplicate IP claim",
-    detail: "192.168.1.1 advertised by aa:bb:cc:00:11:22 and ae:12:90:ff:00:01 within 400 ms.",
-    severity: "high",
-    timeLabel: "6 min ago",
-    relatedIncident: "a-1038",
-  },
-  {
-    id: "arp-008",
-    title: "Unsolicited ARP reply storm",
-    detail: "VLAN 10 · >120 unsolicited replies/min from single source MAC toward broadcast.",
-    severity: "medium",
-    timeLabel: "22 min ago",
-    relatedIncident: null,
-  },
-];
+import { useEffect, useMemo, useState } from "react";
+import { analyzeArp, createArpSample, getArpSamples } from "@/lib/harisApi";
 
 const trustBadge = {
   verified: "bg-foreground/[0.06] text-muted border-border",
@@ -179,13 +95,91 @@ function ArpVolumeChart({ data }) {
   );
 }
 
+function mapArpRow(row) {
+  return {
+    id: row.id,
+    ip: row.ip_address || row.source_ip || "unknown",
+    mac: row.mac_address || "unknown",
+    vlan: row.vlan || row.source_vlan || "-",
+    iface: row.interface || row.iface || "-",
+    age: row.timestamp ? new Date(row.timestamp).toLocaleString() : "unknown",
+    trust: row.is_suspicious ? "suspicious" : row.is_unsolicited ? "stale" : "verified",
+    note: row.arp_type || row.raw_data?.note || "ARP sample",
+  };
+}
+
 export default function AnalysisPage() {
+  const [arpRows, setArpRows] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(true);
   const [trustFilter, setTrustFilter] = useState("all");
+  const [sampleForm, setSampleForm] = useState({
+    ip_address: "192.168.1.10",
+    mac_address: "00:11:22:33:44:55",
+    arp_type: "reply",
+  });
+
+  const loadSamples = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getArpSamples();
+      setArpRows(data.results.map(mapArpRow));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ARP samples could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSamples();
+  }, []);
 
   const filteredArp = useMemo(() => {
-    if (trustFilter === "all") return ARP_TABLE;
-    return ARP_TABLE.filter((r) => r.trust === trustFilter);
-  }, [trustFilter]);
+    if (trustFilter === "all") return arpRows;
+    return arpRows.filter((r) => r.trust === trustFilter);
+  }, [arpRows, trustFilter]);
+
+  const summary = useMemo(
+    () => ({
+      vlanMonitored: new Set(arpRows.map((row) => row.vlan)).size,
+      arpNeighborsTracked: arpRows.length,
+      suspiciousBindings: arpRows.filter((row) => row.trust === "suspicious").length,
+      spoofAlertsOpen: arpRows.filter((row) => row.trust === "suspicious" || row.trust === "stale").length,
+    }),
+    [arpRows]
+  );
+
+  const handleAnalyzeArp = async () => {
+    try {
+      await analyzeArp({});
+      setSuccess("ARP analysis job submitted.");
+      setError("");
+      await loadSamples();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ARP analysis could not be started.");
+    }
+  };
+
+  const handleCreateSample = async () => {
+    try {
+      await createArpSample({
+        timestamp: new Date().toISOString(),
+        ip_address: sampleForm.ip_address,
+        mac_address: sampleForm.mac_address,
+        arp_type: sampleForm.arp_type,
+        is_unsolicited: false,
+        raw_data: {},
+      });
+      setSuccess("ARP sample created.");
+      setError("");
+      await loadSamples();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create ARP sample.");
+    }
+  };
 
   return (
     <div className="relative w-full max-w-7xl mx-auto px-1 sm:px-0">
@@ -215,25 +209,68 @@ export default function AnalysisPage() {
               </Link>
               .
             </p>
+            {error ? <p className="text-xs text-primary pt-1">{error}</p> : null}
+            {success ? <p className="text-xs text-accent pt-1">{success}</p> : null}
           </div>
+          <button
+            type="button"
+            onClick={handleAnalyzeArp}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border/90 bg-card px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+          >
+            {loading ? "Loading" : "Analyze ARP"}
+          </button>
         </header>
+
+        <section className="rounded-2xl border border-border/90 bg-card p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-foreground">Create ARP sample</h2>
+          <p className="text-xs text-muted mt-1">POST arp/samples</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              className="rounded-xl border border-border/90 px-3 py-2 text-sm font-mono"
+              value={sampleForm.ip_address}
+              onChange={(e) => setSampleForm((f) => ({ ...f, ip_address: e.target.value }))}
+              placeholder="ip_address"
+            />
+            <input
+              className="rounded-xl border border-border/90 px-3 py-2 text-sm font-mono"
+              value={sampleForm.mac_address}
+              onChange={(e) => setSampleForm((f) => ({ ...f, mac_address: e.target.value }))}
+              placeholder="mac_address"
+            />
+            <select
+              className="rounded-xl border border-border/90 px-3 py-2 text-sm"
+              value={sampleForm.arp_type}
+              onChange={(e) => setSampleForm((f) => ({ ...f, arp_type: e.target.value }))}
+            >
+              <option value="reply">reply</option>
+              <option value="request">request</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleCreateSample}
+              className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-bold text-primary"
+            >
+              Create sample
+            </button>
+          </div>
+        </section>
 
         <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-label="Summary metrics">
           <div className="rounded-2xl border border-border/90 bg-card p-4 shadow-sm sm:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">VLANs monitored</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{SUMMARY.vlanMonitored}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{summary.vlanMonitored}</p>
           </div>
           <div className="rounded-2xl border border-border/90 bg-card p-4 shadow-sm sm:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">ARP neighbors</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-primary">{SUMMARY.arpNeighborsTracked}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-primary">{summary.arpNeighborsTracked}</p>
           </div>
           <div className="rounded-2xl border border-border/90 bg-card p-4 shadow-sm sm:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Suspicious bindings</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-accent">{SUMMARY.suspiciousBindings}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-accent">{summary.suspiciousBindings}</p>
           </div>
           <div className="rounded-2xl border border-border/90 bg-card p-4 shadow-sm sm:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Spoof alerts open</p>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{SUMMARY.spoofAlertsOpen}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{summary.spoofAlertsOpen}</p>
           </div>
         </section>
 
@@ -245,50 +282,40 @@ export default function AnalysisPage() {
             <h2 id="arp-volume-heading" className="text-base font-semibold text-foreground tracking-tight">
               ARP request volume
             </h2>
-            <p className="mt-0.5 text-xs text-muted">Rolling windows (mock timeline)</p>
+            <p className="mt-0.5 text-xs text-muted">Sample volume by hour (from loaded samples)</p>
             <div className="mt-4 rounded-2xl border border-border/70 bg-linear-to-b from-background/90 to-background/40 p-4">
-              <ArpVolumeChart data={ARP_CHART} />
+              {arpRows.length ? (
+                <ArpVolumeChart
+                  data={[
+                    { label: "S1", reqs: arpRows.length },
+                    { label: "Sus", reqs: summary.suspiciousBindings },
+                  ]}
+                />
+              ) : (
+                <p className="py-8 text-center text-sm text-muted">No samples to chart.</p>
+              )}
             </div>
           </section>
 
-          <section
-            className="xl:col-span-2 rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm"
-            aria-labelledby="spoof-heading"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h2 id="spoof-heading" className="text-base font-semibold text-foreground tracking-tight">
-                  Spoofing signals
-                </h2>
-                <p className="mt-0.5 text-xs text-muted">Correlates with ARP inspection</p>
-              </div>
-            </div>
+          <section className="xl:col-span-2 rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm">
+            <h2 className="text-base font-semibold text-foreground">Suspicious bindings</h2>
+            <p className="mt-0.5 text-xs text-muted">From arp/samples API</p>
             <ul className="mt-4 space-y-3">
-              {SPOOF_ALERTS.map((a) => (
-                <li
-                  key={a.id}
-                  className="rounded-xl border border-border/70 bg-background/40 p-3 transition hover:border-primary/25"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">{a.title}</p>
-                    <span
-                      className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${severityBadge[a.severity]}`}
-                    >
-                      {a.severity}
+              {arpRows
+                .filter((r) => r.trust !== "verified")
+                .slice(0, 6)
+                .map((a) => (
+                  <li key={`${a.ip}-${a.mac}`} className="rounded-xl border border-border/70 bg-background/40 p-3">
+                    <p className="text-sm font-semibold text-foreground font-mono">{a.ip}</p>
+                    <p className="mt-1 text-xs text-muted">{a.note}</p>
+                    <span className={`mt-2 inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold capitalize ${trustBadge[a.trust]}`}>
+                      {a.trust}
                     </span>
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">{a.detail}</p>
-                  <p className="mt-2 text-[11px] text-muted tabular-nums">{a.timeLabel}</p>
-                  {a.relatedIncident ? (
-                    <Link
-                      href={`/attacks/${a.relatedIncident}`}
-                      className="mt-2 inline-flex text-xs font-bold text-primary hover:text-primary-light"
-                    >
-                      Open incident →
-                    </Link>
-                  ) : null}
-                </li>
-              ))}
+                  </li>
+                ))}
+              {arpRows.filter((r) => r.trust !== "verified").length === 0 ? (
+                <li className="text-xs text-muted">No suspicious samples in the current feed.</li>
+              ) : null}
             </ul>
           </section>
         </div>
@@ -302,7 +329,9 @@ export default function AnalysisPage() {
               <h2 id="arp-table-heading" className="text-base font-semibold text-foreground tracking-tight">
                 ARP binding table
               </h2>
-              <p className="text-xs text-muted mt-0.5">High-trust segments · sample subset</p>
+              <p className="text-xs text-muted mt-0.5">
+                {loading ? "Loading…" : `${filteredArp.length} sample(s) from API`}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by trust">
               {["all", "verified", "suspicious", "stale"].map((v) => (

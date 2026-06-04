@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { useSelector } from "react-redux";
-import { selectCurrentUser, selectIsAuthenticated } from "@/redux/slices/authSlice";
+import { useEffect, useMemo } from "react";
+import { getAccessToken } from "@/lib/authStorage";
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import {
+  fetchCurrentUser,
+  selectAuthError,
+  selectAuthStatus,
+  selectCurrentUser,
+  selectIsAuthenticated,
+} from "@/redux/slices/authSlice";
 
 const FEATURE_LABELS = [
   { key: "dashboard", label: "Dashboard overview" },
@@ -14,8 +21,40 @@ const FEATURE_LABELS = [
   { key: "response", label: "Response playbooks" },
 ];
 
-
+/** صلاحيات افتراضية للعرض حتى يعود role من الـ API */
 const MATRIX = {
+  ADMIN: {
+    dashboard: true,
+    alerts: true,
+    logs: true,
+    analysis: true,
+    simulation: true,
+    response: true,
+  },
+  NETWORK_ADMIN: {
+    dashboard: true,
+    alerts: true,
+    logs: true,
+    analysis: true,
+    simulation: true,
+    response: true,
+  },
+  SECURITY_ENGINEER: {
+    dashboard: true,
+    alerts: true,
+    logs: true,
+    analysis: true,
+    simulation: true,
+    response: false,
+  },
+  USER: {
+    dashboard: true,
+    alerts: true,
+    logs: true,
+    analysis: false,
+    simulation: false,
+    response: false,
+  },
   admin: {
     dashboard: true,
     alerts: true,
@@ -43,28 +82,41 @@ const MATRIX = {
 };
 
 function inferRole(user) {
-  if (!user) return "student";
+  if (!user) return "USER";
+  if (user.role) return String(user.role).toUpperCase();
   if (user.role === "admin" || user.role === "engineer" || user.role === "student") {
     return user.role;
   }
   const u = user.username.toLowerCase();
-  if (u.includes("admin")) return "admin";
-  if (u.includes("engineer") || u.includes("soc") || u.includes("analyst")) return "engineer";
-  return "student";
+  if (u.includes("admin")) return "ADMIN";
+  if (u.includes("engineer") || u.includes("soc") || u.includes("analyst")) return "SECURITY_ENGINEER";
+  return "USER";
 }
 
 const roleBadge = {
   admin: "bg-primary/12 text-primary border-primary/25",
   engineer: "bg-accent/10 text-accent border-accent/25",
   student: "bg-foreground/[0.06] text-muted border-border",
+  ADMIN: "bg-primary/12 text-primary border-primary/25",
+  NETWORK_ADMIN: "bg-primary/12 text-primary border-primary/25",
+  SECURITY_ENGINEER: "bg-accent/10 text-accent border-accent/25",
+  USER: "bg-foreground/[0.06] text-muted border-border",
 };
 
 export default function ProfilePage() {
-  const user = useSelector(selectCurrentUser);
-  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const dispatch = useAppDispatch();
+  const user = useAppSelector(selectCurrentUser);
+  const isAuthenticated = useAppSelector(selectIsAuthenticated);
+  const profileError = useAppSelector(selectAuthError);
+  const profileLoading = useAppSelector(selectAuthStatus) === "loading";
 
-  const role = useMemo(() => inferRole(user), [user]);
-  const flags = MATRIX[role];
+  useEffect(() => {
+    if (getAccessToken()) dispatch(fetchCurrentUser());
+  }, [dispatch]);
+
+  const displayUser = user;
+  const role = useMemo(() => inferRole(displayUser), [displayUser]);
+  const flags = MATRIX[role] ?? MATRIX.USER;
 
   return (
     <div className="relative w-full max-w-7xl mx-auto px-1 sm:px-0">
@@ -78,11 +130,13 @@ export default function ProfilePage() {
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Account</p>
           <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">Profile</h1>
           <p className="text-sm sm:text-base text-muted leading-relaxed">
-            Session identity from your login and the lab&apos;s default capability matrix. Replace with server claims when IAM is wired.
+            Identity from <code className="text-xs">GET auth/me</code> and capability matrix by role.
           </p>
+          {profileLoading ? <p className="text-xs text-muted">Loading profile from API…</p> : null}
+          {profileError ? <p className="text-xs text-primary">{profileError}</p> : null}
         </header>
 
-        {!isAuthenticated || !user ? (
+        {!isAuthenticated || !displayUser ? (
           <div className="rounded-2xl border border-border/90 bg-card p-8 text-center shadow-sm">
             <p className="text-sm font-medium text-foreground">No active session in Redux</p>
             <p className="mt-2 text-xs text-muted">Sign in again to hydrate profile state.</p>
@@ -98,7 +152,12 @@ export default function ProfilePage() {
             <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2 rounded-2xl border border-border/90 bg-linear-to-b from-card to-card/95 p-5 sm:p-6 shadow-sm">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Signed in as</h2>
-                <p className="mt-3 text-2xl font-bold font-mono text-foreground break-all">{user.username}</p>
+                <p className="mt-3 text-2xl font-bold font-mono text-foreground break-all">
+                  {displayUser.username}
+                </p>
+                {displayUser.email ? (
+                  <p className="mt-1 text-sm text-muted">{displayUser.email}</p>
+                ) : null}
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-muted">Effective role</span>
                   <span
@@ -108,9 +167,10 @@ export default function ProfilePage() {
                   </span>
                 </div>
                 <p className="mt-4 text-xs leading-relaxed text-muted">
-                  Role is taken from <code className="rounded bg-background px-1 py-0.5 font-mono text-[10px]">user.role</code> when present; otherwise inferred from username keywords for demo (
-                  <span className="font-mono">admin</span>, <span className="font-mono">engineer</span>
-                  , …).
+                  Role from API:{" "}
+                  <code className="rounded bg-background px-1 py-0.5 font-mono text-[10px]">
+                    {displayUser.role ?? "—"}
+                  </code>
                 </p>
               </div>
 

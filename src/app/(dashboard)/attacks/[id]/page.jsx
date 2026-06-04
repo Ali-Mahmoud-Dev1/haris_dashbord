@@ -1,144 +1,32 @@
-import Link from "next/link";
+"use client";
 
-/**
- * Mock incidents — align IDs with alerts feed; replace with API fetch by `id`.
- * 
- */
-const INCIDENTS = {
-  "a-1042": {
-    attackType: "Port scan",
-    ip: "192.168.1.45",
-    timeIso: "2026-04-23T12:28:00",
-    timeLabel: "2 min ago",
-    status: "open",
-    severity: "high",
-    ruleId: "ET SCAN Potential SSH Scan",
-    ruleCategory: "Attempted reconnaissance",
-    reason:
-      "Outbound SYN packets observed targeting sequential TCP ports on internal VLAN 20 over a 90-second window. Pattern consistent with automated horizontal discovery rather than benign client retries.",
-    response: [
-      "Temporarily block source IP 192.168.1.45 at the east perimeter ACL group FW-EDGE-EAST.",
-      "Rotate session tokens for exposed SSH listeners; verify authorized scanners only.",
-      "Capture full PCAP on sensor-east for 15 minutes and attach to this incident.",
-    ],
-    confidence: "high",
-    sources: ["sensor-east", "fw-log-ingest"],
-  },
-  "a-1041": {
-    attackType: "Brute force (SSH)",
-    ip: "10.0.0.18",
-    timeIso: "2026-04-23T12:14:00",
-    timeLabel: "16 min ago",
-    status: "investigating",
-    severity: "high",
-    ruleId: "AUTH_MULTIPLE_FAILURES_SSH",
-    ruleCategory: "Credential abuse",
-    reason:
-      "Twenty-seven failed authentication attempts from the same source against srv-db-02 within five minutes. Usernames rotated across common service accounts (root, admin, postgres).",
-    response: [
-      "Enable tarpitting / fail2ban-style backoff on jump hosts facing this subnet.",
-      "Force MFA verification for any successful SSH from 10.0.0.0/24 for the next 24 h.",
-      "Invalidate VPN posture until device MAC is reconciled in NAC.",
-    ],
-    confidence: "high",
-    sources: ["sshd", "jump-box"],
-  },
-  "a-1040": {
-    attackType: "ICMP flood",
-    ip: "172.16.0.7",
-    timeIso: "2026-04-23T11:30:00",
-    timeLabel: "1 h ago",
-    status: "open",
-    severity: "medium",
-    ruleId: "DOS_ICMP_VOLUME_THRESHOLD",
-    ruleCategory: "Denial of service",
-    reason:
-      "ICMP echo reply traffic exceeded baseline by 420% toward resolver-01. TTL and payload entropy suggest scripted flood rather than diagnostic ping.",
-    response: [
-      "Apply ICMP rate-limit on upstream router interface facing 172.16.0.0/20.",
-      "Escalate to ISP if external sourcing confirmed after PCAP review.",
-    ],
-    confidence: "medium",
-    sources: ["sensor-west", "ids"],
-  },
-  "a-1039": {
-    attackType: "DNS amplification",
-    ip: "203.0.113.44",
-    timeIso: "2026-04-23T09:15:00",
-    timeLabel: "3 h ago",
-    status: "resolved",
-    severity: "medium",
-    ruleId: "DNS_RESPONSE_AMPLIFICATION",
-    ruleCategory: "Reflection abuse",
-    reason:
-      "Large UDP DNS responses sourced from open resolver toward WAN without matching internal queries — indicative of reflected amplification toward external victims.",
-    response: [
-      "ACL deny outbound UDP/53 except to approved upstream resolvers (completed).",
-      "Patch BIND recursion settings — verified closed.",
-    ],
-    confidence: "high",
-    sources: ["dns", "firewall"],
-  },
-  "a-1038": {
-    attackType: "ARP mismatch",
-    ip: "192.168.1.2",
-    timeIso: "2026-04-23T09:00:00",
-    timeLabel: "3 h ago",
-    status: "resolved",
-    severity: "low",
-    ruleId: "ARP_TABLE_DRIFT",
-    ruleCategory: "Layer-2 anomaly",
-    reason:
-      "Gateway MAC binding flipped twice within two minutes while DHCP leases remained stable — possible gratuitous ARP spoof attempt or misconfigured hypervisor bridge.",
-    response: [
-      "Refresh DHCP snooping bindings on access switches VLAN 1.",
-      "Document maintenance window if virtualization team migrated default GW.",
-    ],
-    confidence: "medium",
-    sources: ["switch-agg", "dhcp"],
-  },
-  "a-1037": {
-    attackType: "SQL injection attempt",
-    ip: "198.51.100.12",
-    timeIso: "2026-04-22T18:40:00",
-    timeLabel: "18 h ago",
-    status: "investigating",
-    severity: "high",
-    ruleId: "WAF_SQLI_CLASSIC_UNION",
-    ruleCategory: "Application exploit",
-    reason:
-      "WAF flagged UNION SELECT payloads against /api/report/export on web-lb-01. Request URIs matched OWASP SQLi corpus signature set B.",
-    response: [
-      "Revoke session cookies for affected application tier; rotate DB read credentials.",
-      "Deploy temporary GeoIP block on 198.51.100.0/24 pending vendor ASN review.",
-    ],
-    confidence: "high",
-    sources: ["nginx", "waf-edge"],
-  },
-  "a-1036": {
-    attackType: "DDoS (SYN)",
-    ip: "192.0.2.55",
-    timeIso: "2026-04-22T14:00:00",
-    timeLabel: "22 h ago",
-    status: "open",
-    severity: "critical",
-    ruleId: "SYN_FLOOD_MITIGATION",
-    ruleCategory: "Denial of service",
-    reason:
-      "SYN backlog saturation on public VIP exceeded adaptive threshold; legitimate handshake completion rate dropped 61%. Attack sourced from botnet-class prefix churn.",
-    response: [
-      "Leave SYN cookies enforced on gw-core-01 — monitoring active.",
-      "Coordinate with transit provider for remote-triggered blackhole if volume spikes.",
-    ],
-    confidence: "high",
-    sources: ["firewall", "telemetry-ddos"],
-  },
-};
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import {
+  addIncidentNote,
+  closeIncident,
+  fetchIncident,
+  fetchIncidentTimeline,
+  markIncidentFalsePositive,
+  markIncidentResolved,
+  selectCurrentIncident,
+  selectIncidentActionError,
+  selectIncidentActionLoading,
+  selectIncidentError,
+  selectIncidentTimeline,
+  startIncidentReview,
+  suggestIncidentResponse,
+} from "@/redux/slices/attacksSlice";
 
 const statusBadge = {
+  new: "bg-primary/12 text-primary border-primary/25",
   open: "bg-primary/12 text-primary border-primary/25",
   investigating: "bg-accent/10 text-accent border-accent/25",
+  reviewing: "bg-accent/10 text-accent border-accent/25",
   resolved: "bg-foreground/[0.06] text-muted border-border",
+  closed: "bg-foreground/[0.06] text-muted border-border",
 };
 
 const severityBadge = {
@@ -148,23 +36,19 @@ const severityBadge = {
   low: "bg-foreground/[0.06] text-muted border-border",
 };
 
-function UnknownIncident({ id }) {
+function UnknownIncident({ id, error }) {
   return (
     <div className="relative w-full max-w-3xl mx-auto px-1 sm:px-0">
-      <div
-        className="absolute left-0 right-0 -top-4 sm:-top-2 h-px max-w-7xl mx-auto bg-linear-to-r from-transparent via-primary/40 to-transparent pointer-events-none"
-        aria-hidden
-      />
       <div className="rounded-2xl border border-border/90 bg-card p-8 text-center shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted">Incident</p>
         <h1 className="mt-2 text-2xl font-bold text-foreground">Not found</h1>
         <p className="mt-2 font-mono text-sm text-muted">{id}</p>
         <p className="mt-4 text-sm text-muted">
-          This ID is not in the current mock dataset. Open an alert from the feed or return to the list.
+          {error || "This alert could not be loaded from the API. Return to the alerts list."}
         </p>
         <Link
           href="/alerts"
-          className="mt-6 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="mt-6 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-primary-dark"
         >
           Back to alerts
         </Link>
@@ -173,28 +57,56 @@ function UnknownIncident({ id }) {
   );
 }
 
-export default async function AttackDetailPage({ params }) {
-  const { id } = await params;
-  const incident = INCIDENTS[id];
+export default function AttackDetailPage() {
+  const params = useParams();
+  const id = String(params?.id ?? "");
+  const dispatch = useAppDispatch();
+
+  const incident = useAppSelector(selectCurrentIncident);
+  const timeline = useAppSelector(selectIncidentTimeline);
+  const status = useAppSelector(selectIncidentStatus);
+  const loadError = useAppSelector(selectIncidentError);
+  const actionError = useAppSelector(selectIncidentActionError);
+  const actionLoading = useAppSelector(selectIncidentActionLoading);
+  const error = actionError || loadError || "";
+
+  const loading = status === "loading" || status === "idle";
+  const [noteText, setNoteText] = useState("");
+
+  useEffect(() => {
+    if (!id) return;
+    dispatch(fetchIncident(id));
+    dispatch(fetchIncidentTimeline(id));
+  }, [dispatch, id]);
+
+  const handleAddNote = async () => {
+    const message = noteText.trim();
+    if (!message) return;
+    const result = await dispatch(addIncidentNote({ id, message }));
+    if (addIncidentNote.fulfilled.match(result)) {
+      setNoteText("");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto py-16 text-center text-sm text-muted">Loading incident…</div>
+    );
+  }
 
   if (!incident) {
-    return <UnknownIncident id={id} />;
+    return <UnknownIncident id={id} error={loadError} />;
   }
 
   const titleId = `incident-${id}`;
 
   return (
     <div className="relative w-full max-w-7xl mx-auto px-1 sm:px-0">
-      <div
-        className="absolute left-0 right-0 -top-4 sm:-top-2 h-px max-w-7xl mx-auto bg-linear-to-r from-transparent via-primary/40 to-transparent pointer-events-none"
-        aria-hidden
-      />
-
       <div className="space-y-6 sm:space-y-8 pt-0">
         <nav className="text-sm text-muted" aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-1.5">
             <li>
-              <Link href="/alerts" className="font-medium text-primary hover:text-primary-light transition">
+              <Link href="/alerts" className="font-medium text-primary hover:text-primary-light">
                 Alerts
               </Link>
             </li>
@@ -205,21 +117,20 @@ export default async function AttackDetailPage({ params }) {
 
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-              Incident detail
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">Incident detail</p>
             <h1 id={titleId} className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
               {incident.attackType}
             </h1>
             <p className="font-mono text-sm text-muted">{id}</p>
+            {error ? <p className="text-xs text-primary">{error}</p> : null}
             <div className="flex flex-wrap gap-2 pt-1">
               <span
-                className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${statusBadge[incident.status]}`}
+                className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize ${statusBadge[incident.status] ?? statusBadge.open}`}
               >
                 {incident.status}
               </span>
               <span
-                className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${severityBadge[incident.severity]}`}
+                className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize ${severityBadge[incident.severity] ?? severityBadge.low}`}
               >
                 {incident.severity} severity
               </span>
@@ -237,15 +148,74 @@ export default async function AttackDetailPage({ params }) {
           </div>
         </header>
 
+        <section className="rounded-2xl border border-border/90 bg-card p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-foreground">Workflow</h2>
+          <p className="text-xs text-muted mt-1">haris_api_contract — incidents/alerts workflow</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => dispatch(startIncidentReview(id))}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:border-primary/30 disabled:opacity-50"
+            >
+              Start review
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => dispatch(markIncidentResolved(id))}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:border-primary/30 disabled:opacity-50"
+            >
+              Mark resolved
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => dispatch(markIncidentFalsePositive(id))}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:border-primary/30 disabled:opacity-50"
+            >
+              False positive
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => dispatch(closeIncident(id))}
+              className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:border-primary/30 disabled:opacity-50"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => dispatch(suggestIncidentResponse(id))}
+              className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-bold text-primary disabled:opacity-50"
+            >
+              Suggest response
+            </button>
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Analyst note…"
+              className="flex-1 rounded-xl border border-border/90 bg-background/60 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              disabled={actionLoading || !noteText.trim()}
+              onClick={handleAddNote}
+              className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+            >
+              Add note
+            </button>
+          </div>
+        </section>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <section
-              className="rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm shadow-foreground/5"
-              aria-labelledby="rule-heading"
-            >
-              <h2 id="rule-heading" className="text-base font-semibold text-foreground tracking-tight">
-                Detection rule
-              </h2>
+            <section className="rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-foreground">Detection rule</h2>
               <p className="mt-1 text-xs text-muted">{incident.ruleCategory}</p>
               <dl className="mt-4 space-y-3">
                 <div>
@@ -259,23 +229,13 @@ export default async function AttackDetailPage({ params }) {
               </dl>
             </section>
 
-            <section
-              className="rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm shadow-foreground/5"
-              aria-labelledby="reason-heading"
-            >
-              <h2 id="reason-heading" className="text-base font-semibold text-foreground tracking-tight">
-                Why this was flagged
-              </h2>
+            <section className="rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm">
+              <h2 className="text-base font-semibold text-foreground">Why this was flagged</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted">{incident.reason}</p>
             </section>
 
-            <section
-              className="rounded-2xl border border-border/90 bg-linear-to-b from-primary/6 to-card p-5 sm:p-6 shadow-sm shadow-foreground/5 ring-1 ring-primary/15"
-              aria-labelledby="response-heading"
-            >
-              <h2 id="response-heading" className="text-base font-semibold text-foreground tracking-tight">
-                Recommended response
-              </h2>
+            <section className="rounded-2xl border border-border/90 bg-card p-5 sm:p-6 shadow-sm ring-1 ring-primary/15">
+              <h2 className="text-base font-semibold text-foreground">Recommended response</h2>
               <ul className="mt-4 list-none space-y-3">
                 {incident.response.map((step, i) => (
                   <li key={i} className="flex gap-3">
@@ -286,13 +246,9 @@ export default async function AttackDetailPage({ params }) {
                   </li>
                 ))}
               </ul>
-              <p className="mt-4 text-xs text-muted">
-                For playbook automation, wire these steps to{" "}
-                <Link href="/response" className="font-semibold text-primary hover:text-primary-light">
-                  Response actions
-                </Link>
-                .
-              </p>
+              <Link href="/response" className="mt-4 inline-block text-xs font-semibold text-primary">
+                Open response actions →
+              </Link>
             </section>
           </div>
 
@@ -309,18 +265,32 @@ export default async function AttackDetailPage({ params }) {
             </div>
 
             <div className="rounded-2xl border border-border/90 bg-card p-5 shadow-sm">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Timeline</h3>
+              {timeline.length === 0 ? (
+                <p className="mt-3 text-xs text-muted">No timeline events yet.</p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {timeline.map((event, index) => (
+                    <li key={event.id ?? index} className="text-xs text-muted border-l-2 border-primary/30 pl-2">
+                      {event.message || event.action || event.status || event.notes || "Event"}
+                      {event.created_at ? (
+                        <span className="block text-[10px] mt-0.5 opacity-80">
+                          {new Date(event.created_at).toLocaleString()}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-border/90 bg-card p-5 shadow-sm">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Shortcuts</h3>
               <div className="mt-3 flex flex-col gap-2">
-                <Link
-                  href="/logs"
-                  className="rounded-xl border border-border/80 bg-background/50 px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                >
+                <Link href="/logs" className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:border-primary/30">
                   Search related logs
                 </Link>
-                <Link
-                  href="/alerts"
-                  className="rounded-xl border border-border/80 bg-background/50 px-3 py-2 text-sm font-semibold text-foreground transition hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-                >
+                <Link href="/alerts" className="rounded-xl border border-border/80 px-3 py-2 text-sm font-semibold hover:border-primary/30">
                   All alerts
                 </Link>
               </div>

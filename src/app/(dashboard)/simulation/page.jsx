@@ -2,6 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { generateSimulatorLogs, runDetection } from "@/lib/harisApi";
+
+const SCENARIO_TO_API = {
+  portscan: "port-scan",
+  bruteforce: "ssh-bruteforce",
+  icmp: "icmp-flood",
+  vlan: "vlan-violation",
+  arp: "arp-spoofing",
+  mixed: "mixed",
+};
 
 const SCENARIOS = {
   portscan: {
@@ -56,6 +66,39 @@ const SCENARIOS = {
       },
     ],
   },
+  vlan: {
+    id: "vlan",
+    title: "VLAN violation",
+    short: "Traffic observed on an unauthorized VLAN segment.",
+    detectionTitle: "How it was detected",
+    summary: "802.1Q tags on access ports did not match the authorized VLAN map for the source MAC.",
+    steps: [
+      { label: "Switch ACL", text: "Violation counter incremented on access-07 for VLAN 99." },
+      { label: "NAC", text: "Posture mismatch flagged student workstation profile." },
+    ],
+  },
+  arp: {
+    id: "arp",
+    title: "ARP spoofing",
+    short: "Gratuitous ARP replies claiming the default gateway MAC.",
+    detectionTitle: "How it was detected",
+    summary: "ARP inspection detected duplicate IP-to-MAC claims within a short window.",
+    steps: [
+      { label: "ARP table", text: "Binding drift on VLAN 10 default gateway." },
+      { label: "Samples", text: "arp/analyze pipeline raised spoofing alert." },
+    ],
+  },
+  mixed: {
+    id: "mixed",
+    title: "Mixed attack lab",
+    short: "Combined generator for training scenarios.",
+    detectionTitle: "How it was detected",
+    summary: "Multiple synthetic patterns injected for correlation exercises.",
+    steps: [
+      { label: "Simulator", text: "POST simulator/generate/mixed/" },
+      { label: "Detection", text: "POST detection/run over new activity logs." },
+    ],
+  },
   icmp: {
     id: "icmp",
     title: "ICMP flood",
@@ -93,21 +136,35 @@ export default function SimulationPage() {
   const [selected, setSelected] = useState(/** @type {keyof typeof SCENARIOS | null} */ (null));
   const [running, setRunning] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [error, setError] = useState("");
 
   const runSimulation = useCallback(() => {
     if (!selected || running) return;
     setRunning(true);
     setFinished(false);
-    window.setTimeout(() => {
+    setError("");
+    const apiScenario = SCENARIO_TO_API[selected];
+    if (!apiScenario) {
+      setError("Unknown simulation scenario.");
       setRunning(false);
-      setFinished(true);
-    }, 1400);
+      return;
+    }
+    generateSimulatorLogs(apiScenario, {})
+      .then(() => runDetection({ rules: [apiScenario], async: false }))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Simulation failed.");
+      })
+      .finally(() => {
+        setRunning(false);
+        setFinished(true);
+      });
   }, [selected, running]);
 
   const reset = useCallback(() => {
     setSelected(null);
     setRunning(false);
     setFinished(false);
+    setError("");
   }, []);
 
   const scenario = selected ? SCENARIOS[selected] : null;
@@ -128,13 +185,13 @@ export default function SimulationPage() {
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
               Simulation
             </h1>
-            <p className="text-sm sm:text-base text-muted leading-relaxed">
+          <p className="text-sm sm:text-base text-muted leading-relaxed">
               Pick a synthetic attack pattern, run it in the lab harness, and read how the monitoring stack would surface it — without touching production traffic.
-            </p>
-          </div>
+          </p>
+          {error ? <p className="text-xs text-primary pt-1">{error}</p> : null}
+        </div>
           <div className="rounded-2xl border border-accent/25 bg-accent/5 px-4 py-3 text-xs text-muted max-w-md shrink-0">
-            <span className="font-semibold text-accent">Sandbox notice:</span> Events below are illustrative.
-            Wire your backend simulator here later to drive real replay timelines.
+            <span className="font-semibold text-accent">API:</span> simulator/generate/* then detection/run
           </div>
         </header>
 
@@ -142,7 +199,7 @@ export default function SimulationPage() {
           <h2 id="pick-heading" className="text-base font-semibold text-foreground mb-3">
             1 · Choose scenario
           </h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Object.keys(SCENARIOS).map((key) => {
               const s = SCENARIOS[key];
               const isSel = selected === key;

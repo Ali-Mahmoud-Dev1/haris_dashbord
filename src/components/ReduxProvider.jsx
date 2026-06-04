@@ -1,25 +1,24 @@
 "use client";
 
 import { useEffect } from "react";
-import { Provider, useDispatch } from "react-redux";
+import { Provider } from "react-redux";
+import { useAppDispatch } from "@/redux/hooks";
+import { loadAuthSession } from "@/lib/authStorage";
+import { writeSessionCookie } from "@/lib/session";
 import { hydrateFromStorage } from "@/redux/slices/authSlice";
 import { store } from "@/redux/store";
 
 function AuthHydrate() {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("user");
-      if (!raw) {
-        dispatch(hydrateFromStorage(null));
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      dispatch(hydrateFromStorage(parsed));
-    } catch {
+    const session = loadAuthSession();
+    if (!session) {
       dispatch(hydrateFromStorage(null));
+      return;
     }
+    dispatch(hydrateFromStorage(session));
+    if (session.access) writeSessionCookie();
   }, [dispatch]);
 
   return null;

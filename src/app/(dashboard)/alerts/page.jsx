@@ -1,67 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-
-/** Mock — استبدلها بـ API لاحقًا */
-const ALERTS = [
-  {
-    id: "a-1042",
-    attackType: "Port scan",
-    ip: "192.168.1.45",
-    timeIso: "2026-04-23T12:28:00",
-    timeLabel: "2 min ago",
-    status: "open",
-  },
-  {
-    id: "a-1041",
-    attackType: "Brute force (SSH)",
-    ip: "10.0.0.18",
-    timeIso: "2026-04-23T12:14:00",
-    timeLabel: "16 min ago",
-    status: "investigating",
-  },
-  {
-    id: "a-1040",
-    attackType: "ICMP flood",
-    ip: "172.16.0.7",
-    timeIso: "2026-04-23T11:30:00",
-    timeLabel: "1 h ago",
-    status: "open",
-  },
-  {
-    id: "a-1039",
-    attackType: "DNS amplification",
-    ip: "203.0.113.44",
-    timeIso: "2026-04-23T09:15:00",
-    timeLabel: "3 h ago",
-    status: "resolved",
-  },
-  {
-    id: "a-1038",
-    attackType: "ARP mismatch",
-    ip: "192.168.1.2",
-    timeIso: "2026-04-23T09:00:00",
-    timeLabel: "3 h ago",
-    status: "resolved",
-  },
-  {
-    id: "a-1037",
-    attackType: "SQL injection attempt",
-    ip: "198.51.100.12",
-    timeIso: "2026-04-22T18:40:00",
-    timeLabel: "18 h ago",
-    status: "investigating",
-  },
-  {
-    id: "a-1036",
-    attackType: "DDoS (SYN)",
-    ip: "192.0.2.55",
-    timeIso: "2026-04-22T14:00:00",
-    timeLabel: "22 h ago",
-    status: "open",
-  },
-];
+import { useEffect, useMemo, useState } from "react";
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import {
+  fetchAlerts,
+  selectAlertItems,
+  selectAlertsError,
+  selectAlertsStatus,
+} from "@/redux/slices/alertsSlice";
 
 const STATUS_CHIPS = [
   { value: "all", label: "All" },
@@ -70,17 +17,13 @@ const STATUS_CHIPS = [
   { value: "resolved", label: "Resolved" },
 ];
 
-const ATTACK_TYPE_OPTIONS = [
-  { value: "all", label: "All attack types" },
-  ...Array.from(new Set(ALERTS.map((a) => a.attackType)))
-    .sort()
-    .map((t) => ({ value: t, label: t })),
-];
-
 const statusBadge = {
+  new: "bg-primary/12 text-primary border-primary/25",
   open: "bg-primary/12 text-primary border-primary/25",
   investigating: "bg-accent/10 text-accent border-accent/25",
+  reviewing: "bg-accent/10 text-accent border-accent/25",
   resolved: "bg-foreground/[0.06] text-muted border-border",
+  closed: "bg-foreground/[0.06] text-muted border-border",
 };
 
 const selectClass =
@@ -88,7 +31,7 @@ const selectClass =
   "hover:border-primary/25 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/25";
 
 function normalize(s) {
-  return s.trim().toLowerCase();
+  return String(s ?? "").trim().toLowerCase();
 }
 
 function ChevronDown({ className }) {
@@ -100,13 +43,33 @@ function ChevronDown({ className }) {
 }
 
 export default function AlertsPage() {
+  const dispatch = useAppDispatch();
+  const alerts = useAppSelector(selectAlertItems);
+  const status = useAppSelector(selectAlertsStatus);
+  const loading = status === "loading" || status === "idle";
+  const error = useAppSelector(selectAlertsError) ?? "";
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
+  useEffect(() => {
+    dispatch(fetchAlerts());
+  }, [dispatch]);
+
+  const attackTypeOptions = useMemo(
+    () => [
+      { value: "all", label: "All attack types" },
+      ...Array.from(new Set(alerts.map((a) => a.attackType)))
+        .sort()
+        .map((t) => ({ value: t, label: t })),
+    ],
+    [alerts]
+  );
+
   const filtered = useMemo(() => {
     const q = normalize(query);
-    return ALERTS.filter((row) => {
+    return alerts.filter((row) => {
       if (statusFilter !== "all" && row.status !== statusFilter) return false;
       if (typeFilter !== "all" && row.attackType !== typeFilter) return false;
       if (!q) return true;
@@ -116,12 +79,12 @@ export default function AlertsPage() {
         normalize(row.id).includes(q)
       );
     }).sort((a, b) => (a.timeIso < b.timeIso ? 1 : -1));
-  }, [query, statusFilter, typeFilter]);
+  }, [alerts, query, statusFilter, typeFilter]);
 
   const totals = useMemo(() => {
-    const open = ALERTS.filter((a) => a.status === "open").length;
-    return { total: ALERTS.length, open };
-  }, []);
+    const open = alerts.filter((a) => a.status === "open" || a.status === "new").length;
+    return { total: alerts.length, open };
+  }, [alerts]);
 
   const hasFilters = query || statusFilter !== "all" || typeFilter !== "all";
 
@@ -155,7 +118,9 @@ export default function AlertsPage() {
               <span className="tabular-nums font-medium text-foreground">{totals.total}</span> total
               in feed ·{" "}
               <span className="tabular-nums font-medium text-primary">{totals.open}</span> open
+              {loading ? " · loading" : ""}
             </p>
+            {error ? <p className="text-xs text-primary pt-1">{error}</p> : null}
           </div>
         </header>
 
@@ -215,7 +180,7 @@ export default function AlertsPage() {
                   onChange={(e) => setTypeFilter(e.target.value)}
                   className={selectClass}
                 >
-                  {ATTACK_TYPE_OPTIONS.map((o) => (
+                  {attackTypeOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
@@ -293,9 +258,13 @@ export default function AlertsPage() {
                   <path d="M10 20a2 2 0 004 0" strokeLinecap="round" />
                 </svg>
               </div>
-              <p className="text-base font-semibold text-foreground">No incidents match</p>
+              <p className="text-base font-semibold text-foreground">
+                {loading ? "Loading alerts…" : alerts.length === 0 ? "No alerts from API" : "No incidents match"}
+              </p>
               <p className="mt-1 max-w-sm text-sm text-muted">
-                Adjust search or status filters, or reset to see the full feed again.
+                {alerts.length === 0 && !loading
+                  ? "The incidents feed is empty or the API is unreachable."
+                  : "Adjust search or status filters, or reset to see the full feed again."}
               </p>
               <button
                 type="button"
@@ -355,7 +324,7 @@ export default function AlertsPage() {
                         </td>
                         <td className="px-5 py-3.5">
                           <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${statusBadge[row.status]}`}
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold capitalize tracking-wide ${statusBadge[row.status] ?? statusBadge.open}`}
                           >
                             {row.status}
                           </span>
@@ -396,7 +365,7 @@ export default function AlertsPage() {
                           </p>
                         </div>
                         <span
-                          className={`shrink-0 self-start rounded-md border px-2 py-0.5 text-[10px] font-bold capitalize ${statusBadge[row.status]}`}
+                          className={`shrink-0 self-start rounded-md border px-2 py-0.5 text-[10px] font-bold capitalize ${statusBadge[row.status] ?? statusBadge.open}`}
                         >
                           {row.status}
                         </span>
